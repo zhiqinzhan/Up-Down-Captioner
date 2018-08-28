@@ -16,6 +16,12 @@ import random
 import json
 
 
+default_encoding = "utf-8"
+if default_encoding != sys.getdefaultencoding():
+    reload(sys)
+    sys.setdefaultencoding(default_encoding)
+
+
 COCO_ANN_PATH = './data/coco'
 KARPATHY_SPLITS = './data/coco_splits/karpathy_%s_images.txt' # train,val,test
 
@@ -30,7 +36,7 @@ sys.path.append('./external/coco/PythonAPI/')
 from pycocotools.coco import COCO
 
 UNK_IDENTIFIER = '<unk>' # Used to identify unknown words
-SENTENCE_SPLIT_REGEX = re.compile(r'(\W+)') # Split on any non-alphanumeric character
+SENTENCE_SPLIT_REGEX = re.compile(r' ') # Split on any non-alphanumeric character
 
   
 def split_sentence(sentence):
@@ -44,7 +50,7 @@ def split_sentence(sentence):
       toks.append(word)
   # Remove '.' from the end of the sentence - 
   # this is EOS token that will be populated by data layer
-  if toks[-1] != '.':
+  if len(toks) > 0 and toks[-1] != '.':
     return toks
   return toks[:-1]
 
@@ -58,6 +64,7 @@ def line_to_stream(vocabulary, sentence):
     if word in vocabulary:
       stream.append(vocabulary[word])
     else:  # unknown word; append UNK
+      print UNK_IDENTIFIER, word
       stream.append(vocabulary[UNK_IDENTIFIER])
   return stream
 
@@ -79,15 +86,16 @@ def load_caption_vocab(vocab_path=TRAIN_VOCAB_PATH):
   vocab_inverted = {}
   for i,word in enumerate(vocab):
     vocab_inverted[word] = i
+    assert(vocab_inverted[word] == i)
   return vocab,vocab_inverted
 
 
-def build_caption_vocab(out_path, datasets=['train'], base_vocab=None, min_vocab_count=5):
+def build_caption_vocab(out_path, datasets=['train'], base_vocab=None, min_vocab_count=20):
   print 'Building vocab from %s...' % datasets
 
-  train_ids = set()
-  for dataset in datasets:
-    train_ids |= load_karpathy_splits(dataset=dataset)
+  # train_ids = set()
+  # for dataset in datasets:
+  #   train_ids |= load_karpathy_splits(dataset=dataset)
   words_to_count = defaultdict(int)
 
   for dataset in ['train','val']: # coco sources
@@ -95,7 +103,7 @@ def build_caption_vocab(out_path, datasets=['train'], base_vocab=None, min_vocab
     coco = COCO(annFile)
     # Count word frequencies
     for image_id,anns in coco.imgToAnns.iteritems():
-      if image_id in train_ids:
+      # if image_id in train_ids:
         for ann in anns:
           caption_sequence = split_sentence(ann['caption'])
           for word in caption_sequence:
@@ -140,21 +148,21 @@ def preprocess_coco(out_path, datasets=['train'], base_vocab=TRAIN_VOCAB_PATH):
   vocab, vocab_inverted = load_caption_vocab(vocab_path=base_vocab)
 
   # Build training set
-  train_ids = set()
-  for dataset in datasets:
-    print 'Processing karpathy split: %s' % (dataset)
-    train_ids |= load_karpathy_splits(dataset=dataset)
+  # train_ids = set()
+  # for dataset in datasets:
+  #   print 'Processing karpathy split: %s' % (dataset)
+  #   train_ids |= load_karpathy_splits(dataset=dataset)
 
   sequences = []    
   for coco_dataset in ['train','val']:
     annFile='%s/captions_%s2014.json' % (COCO_ANN_PATH, coco_dataset)
     coco = COCO(annFile)
     for image_id,anns in coco.imgToAnns.iteritems():
-      if image_id in train_ids:
+      # if image_id in train_ids:
         image_info = coco.imgs[image_id]
-        image_path = '%s/%s' % (image_info['file_name'].split('_')[1], image_info['file_name'])
+        image_path = '%s2014/%s' % (coco_dataset, image_info['file_name'])
         for ann in anns:
-          caption_sequence = split_sentence(ann['caption'])
+          caption_sequence = split_sentence(ann['caption'].encode('utf-8'))
           sequences.append((image_path, caption_sequence))
 
   # Randomize and save training sequences - this should be repeatable
@@ -169,8 +177,8 @@ def preprocess_coco(out_path, datasets=['train'], base_vocab=TRAIN_VOCAB_PATH):
 
 if __name__ == "__main__":
   build_caption_vocab(TRAIN_VOCAB_PATH, datasets=['train'])
-  build_caption_vocab(TRAINVAL_VOCAB_PATH, datasets=['train', 'val', 'test'], base_vocab=TRAIN_VOCAB_PATH)
+  # build_caption_vocab(TRAINVAL_VOCAB_PATH, datasets=['train', 'val', 'test'], base_vocab=TRAIN_VOCAB_PATH)
   preprocess_coco(TRAIN_CAPTION_PATH, datasets=['train'], base_vocab=TRAIN_VOCAB_PATH)
-  preprocess_coco(TRAINVAL_CAPTION_PATH, datasets=['train', 'val', 'test'], base_vocab=TRAINVAL_VOCAB_PATH)
+  # preprocess_coco(TRAINVAL_CAPTION_PATH, datasets=['train', 'val', 'test'], base_vocab=TRAINVAL_VOCAB_PATH)
 
 
